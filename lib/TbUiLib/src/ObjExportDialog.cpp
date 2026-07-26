@@ -32,6 +32,7 @@
 #include "ui/BorderLine.h"
 #include "ui/DialogButtonLayout.h"
 #include "ui/DialogHeader.h"
+#include "ui/FileDialogDefaultDir.h"
 #include "ui/FormWithSectionsLayout.h"
 #include "ui/MapDocument.h" // IWYU pragma: keep
 #include "ui/MapWindow.h"
@@ -136,7 +137,7 @@ void ObjExportDialog::createGui()
       this,
       tr("Export Wavefront OBJ file"),
       m_exportPathEdit->text(),
-      "Wavefront OBJ files (*.obj)");
+      "Wavefront OBJ files (*.obj)", nullptr, fileDialogOptions());
     if (!newFileName.isEmpty())
     {
       m_exportPathEdit->setText(newFileName);

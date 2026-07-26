@@ -33,5 +33,9 @@ target_link_libraries(TbFsLib
     fmt::fmt-header-only
 )
 
-add_subdirectory(test)
-add_subdirectory(test-utils)
+if(NOT ANDROID)
+  add_subdirectory(test)
+endif()
+if(NOT ANDROID)
+  add_subdirectory(test-utils)
+endif()

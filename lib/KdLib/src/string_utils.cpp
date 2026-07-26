@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <cassert>
 #include <charconv>
+#include <cstdlib>
 #include <iterator>
 #include <optional>
 #include <sstream>
@@ -289,7 +290,12 @@ std::optional<float> str_to_float(std::string_view str)
   str = skip_whitespace(str);
 
   float value;
-#if defined(__APPLE__)
+#if defined(__ANDROID__)
+  const auto string = std::string{str};
+  char* end = nullptr;
+  value = std::strtof(string.c_str(), &end);
+  return end == string.c_str() + string.size() ? std::optional{value} : std::nullopt;
+#elif defined(__APPLE__)
   return fast_float::from_chars(str.data(), str.data() + str.size(), value).ec
              == std::errc{}
            ? std::optional{value}
@@ -306,7 +312,12 @@ std::optional<double> str_to_double(std::string_view str)
   str = skip_whitespace(str);
 
   double value;
-#if defined(__APPLE__)
+#if defined(__ANDROID__)
+  const auto string = std::string{str};
+  char* end = nullptr;
+  value = std::strtod(string.c_str(), &end);
+  return end == string.c_str() + string.size() ? std::optional{value} : std::nullopt;
+#elif defined(__APPLE__)
   return fast_float::from_chars(str.data(), str.data() + str.size(), value).ec
              == std::errc{}
            ? std::optional{value}

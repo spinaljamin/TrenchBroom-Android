@@ -19,11 +19,16 @@
 
 #include "ui/FileDialogDefaultDir.h"
 
+
 #include <QDir>
 #include <QFileInfo>
 #include <QSettings>
+#include <QStandardPaths>
+#include <QtSystemDetection>
 
 #include "Macros.h"
+#include "ui/QPathUtils.h"
+#include "ui/SystemPaths.h"
 
 namespace tb::ui
 {
@@ -64,7 +69,37 @@ QString fileDialogDefaultDirectory(const FileDialogDir dir)
 
   const auto settings = QSettings{};
   const auto defaultDir = settings.value(key).toString();
+  if (!defaultDir.isEmpty())
+  {
+    return defaultDir;
+  }
+
+#if defined(Q_OS_ANDROID)
+  auto root = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+  if (root.isEmpty())
+  {
+    root = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+  }
+  if (root.isEmpty())
+  {
+    root = pathAsQString(SystemPaths::userDataDirectory());
+  }
+
+  const auto defaultDirName = dir == FileDialogDir::MaterialCollection ? "textures" : "maps";
+  const auto defaultPath = QDir{root}.filePath(QString{"TrenchBroom/%1"}.arg(defaultDirName));
+  QDir{}.mkpath(defaultPath);
+  return defaultPath;
+#else
   return defaultDir;
+#endif
+}
+QFileDialog::Options fileDialogOptions()
+{
+#if defined(Q_OS_ANDROID)
+  return QFileDialog::DontUseNativeDialog;
+#else
+  return QFileDialog::Options{};
+#endif
 }
 
 void updateFileDialogDefaultDirectoryWithFilename(

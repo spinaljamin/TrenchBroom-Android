@@ -17,19 +17,36 @@
  along with TrenchBroom. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <QAbstractButton>
 #include <QApplication>
 #include <QCommandLineParser>
-#include <QEvent>
+#include <QCoreApplication>
 #include <QFile>
+#include <QWidget>
+#include <QKeyEvent>
+#include <QFileDialog>
+#include <QEvent>
+#include <QDialog>
+#include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QPalette>
+#include <QPointer>
 #include <QProxyStyle>
 #include <QSettings>
 #include <QString>
+#include <QStringList>
 #include <QStyleHints>
 #include <QSurfaceFormat>
+#include <QTimer>
 #include <QtGlobal>
+#include <QtSystemDetection>
+#if defined(Q_OS_ANDROID)
+#include <QtCore/qcoreapplication_platform.h>
+#include <QtCore/qjnienvironment.h>
+#include <QtCore/qjniobject.h>
+#endif
 
 #include "PreferenceManager.h"
 #include "Preferences.h"
@@ -50,13 +67,179 @@ using namespace tb;
 using namespace tb::ui;
 
 static_assert(
-  QT_VERSION >= QT_VERSION_CHECK(6, 8, 0), "TrenchBroom requires Qt 6.8.0 or later");
+  QT_VERSION >= QT_VERSION_CHECK(6, 7, 0), "TrenchBroom Android test build requires Qt 6.7.0 or later");
 
 extern void qt_set_sequence_auto_mnemonic(bool b);
 
 namespace
 {
+#if defined(Q_OS_ANDROID)
+class AndroidMouseReleaseEventFilter : public QObject
+{
+private:
+  QPointer<QWidget> m_pressedWidget;
+  QPointF m_localPosition;
+  QPointF m_scenePosition;
+  QPointF m_globalPosition;
+  Qt::MouseButton m_button = Qt::NoButton;
+  Qt::KeyboardModifiers m_modifiers;
 
+public:
+  using QObject::QObject;
+
+  bool eventFilter(QObject* watched, QEvent* event) override
+  {
+    auto* widget = qobject_cast<QWidget*>(watched);
+    if (!widget)
+    {
+      return false;
+    }
+
+    if (event->type() == QEvent::MouseButtonPress)
+    {
+      const auto* mouseEvent = static_cast<QMouseEvent*>(event);
+      if (mouseEvent->button() != Qt::NoButton)
+      {
+        m_pressedWidget = widget;
+        m_localPosition = mouseEvent->position();
+        m_scenePosition = mouseEvent->scenePosition();
+        m_globalPosition = mouseEvent->globalPosition();
+        m_button = mouseEvent->button();
+        m_modifiers = mouseEvent->modifiers();
+      }
+    }
+    else if (event->type() == QEvent::MouseMove && m_pressedWidget == widget)
+    {
+      const auto* mouseEvent = static_cast<QMouseEvent*>(event);
+      m_localPosition = mouseEvent->position();
+      m_scenePosition = mouseEvent->scenePosition();
+      m_globalPosition = mouseEvent->globalPosition();
+      m_modifiers = mouseEvent->modifiers();
+    }
+    else if (event->type() == QEvent::MouseButtonRelease)
+    {
+      m_pressedWidget = nullptr;
+      m_button = Qt::NoButton;
+    }
+
+    return false;
+  }
+
+  void synthesizeMouseRelease()
+  {
+    auto* target = m_pressedWidget.data();
+    const auto button = m_button;
+    m_pressedWidget = nullptr;
+    m_button = Qt::NoButton;
+    if (!target || button == Qt::NoButton)
+    {
+      return;
+    }
+
+    auto releaseEvent = QMouseEvent{
+      QEvent::MouseButtonRelease,
+      m_localPosition,
+      m_scenePosition,
+      m_globalPosition,
+      button,
+      Qt::NoButton,
+      m_modifiers};
+    QCoreApplication::sendEvent(target, &releaseEvent);
+  }
+};
+
+AndroidMouseReleaseEventFilter* g_androidMouseReleaseFilter = nullptr;
+
+class AndroidFileDialogEventFilter : public QObject
+{
+public:
+  using QObject::QObject;
+
+  bool eventFilter(QObject* watched, QEvent* event) override
+  {
+    auto* widget = qobject_cast<QWidget*>(watched);
+    if (!widget)
+    {
+      return false;
+    }
+
+    auto* fileDialog = qobject_cast<QFileDialog*>(widget);
+    for (auto* parent = widget->parentWidget(); !fileDialog && parent; parent = parent->parentWidget())
+    {
+      fileDialog = qobject_cast<QFileDialog*>(parent);
+    }
+
+    if (!fileDialog)
+    {
+      return false;
+    }
+
+    if (auto* button = qobject_cast<QAbstractButton*>(widget))
+    {
+      if (event->type() == QEvent::MouseButtonPress)
+      {
+        const auto pressed = button->isEnabled();
+        button->setDown(false);
+        if (pressed)
+        {
+          button->click();
+        }
+        event->accept();
+        return true;
+      }
+      if (event->type() == QEvent::MouseButtonRelease)
+      {
+        button->setDown(false);
+        event->accept();
+        return true;
+      }
+    }
+
+    if (event->type() == QEvent::KeyPress)
+    {
+      const auto* keyEvent = static_cast<QKeyEvent*>(event);
+      if (keyEvent->key() == Qt::Key_Escape)
+      {
+        fileDialog->reject();
+        event->accept();
+        return true;
+      }
+    }
+
+    return false;
+  }
+};
+
+void installAndroidFileDialogEventFilter()
+{
+  qApp->installEventFilter(new AndroidFileDialogEventFilter{qApp});
+  g_androidMouseReleaseFilter = new AndroidMouseReleaseEventFilter{qApp};
+  qApp->installEventFilter(g_androidMouseReleaseFilter);
+}
+void requestAndroidStoragePermissions()
+{
+  if (!QNativeInterface::QAndroidApplication::isActivityContext())
+  {
+    return;
+  }
+
+  auto env = QJniEnvironment{};
+  const auto stringClass = env->FindClass("java/lang/String");
+  const auto permissions = env->NewObjectArray(2, stringClass, nullptr);
+  const auto readPermission = QJniObject::fromString("android.permission.READ_EXTERNAL_STORAGE");
+  const auto writePermission = QJniObject::fromString("android.permission.WRITE_EXTERNAL_STORAGE");
+  env->SetObjectArrayElement(permissions, 0, readPermission.object<jstring>());
+  env->SetObjectArrayElement(permissions, 1, writePermission.object<jstring>());
+
+  auto activity = QJniObject{QNativeInterface::QAndroidApplication::context()};
+  activity.callMethod<void>(
+    "requestPermissions", "([Ljava/lang/String;I)V", permissions, jint(1001));
+  env->DeleteLocalRef(permissions);
+  env->DeleteLocalRef(stringClass);
+}
+#else
+void requestAndroidStoragePermissions() {}
+#endif
 bool loadStyleSheets()
 {
   const auto path = SystemPaths::findResourceFile("stylesheets/base.qss");
@@ -147,6 +330,12 @@ void loadStyle(QApplication& app)
       const QWidget* widget = nullptr,
       QStyleHintReturn* returnData = nullptr) const override
     {
+#if defined(Q_OS_ANDROID)
+      if (hint == QStyle::SH_Menu_SubMenuPopupDelay)
+      {
+        return 0;
+      }
+#endif
       return hint == QStyle::SH_MenuBar_AltKeyNavigation
                ? 0
                : QProxyStyle::styleHint(hint, option, widget, returnData);
@@ -158,7 +347,9 @@ void loadStyle(QApplication& app)
   {
     app.setStyle(new TrenchBroomProxyStyle{"Fusion"});
     app.setPalette(darkPalette());
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
     app.styleHints()->setColorScheme(Qt::ColorScheme::Dark);
+#endif
   }
   else
   {
@@ -166,7 +357,6 @@ void loadStyle(QApplication& app)
     app.setStyle(new TrenchBroomProxyStyle{});
   }
 }
-
 auto createAppController()
 {
   return AppController::create() | kdl::if_error([](auto e) {
@@ -184,6 +374,9 @@ auto createAppController()
 [[maybe_unused]] void populateMainMenu(AppController& appController)
 {
   auto* menuBar = new QMenuBar{};
+#if defined(Q_OS_ANDROID)
+  menuBar->setNativeMenuBar(false);
+#endif
   auto actionMap = std::unordered_map<const Action*, QAction*>{};
 
   auto menuBuilderResult = populateMenuBar(
@@ -250,17 +443,47 @@ bool parseCommandLineAndOpenFiles(AppController& appController)
 
 } // namespace
 
+#if defined(Q_OS_ANDROID)
+extern "C" JNIEXPORT void JNICALL
+Java_org_trenchbroom_TrenchBroomActivity_nativeMouseButtonReleased(JNIEnv*, jclass)
+{
+  if (g_androidMouseReleaseFilter)
+  {
+    QMetaObject::invokeMethod(
+      g_androidMouseReleaseFilter,
+      []() {
+        if (g_androidMouseReleaseFilter)
+        {
+          g_androidMouseReleaseFilter->synthesizeMouseRelease();
+        }
+      },
+      Qt::QueuedConnection);
+  }
+}
+#endif
+
 int main(int argc, char* argv[])
 {
+#if defined(Q_OS_ANDROID)
+  Q_INIT_RESOURCE(android_bundled_resources);
+  Q_INIT_RESOURCE(resources);
+#endif
   // Set OpenGL defaults
   // Needs to be done here before QApplication is created
   // (see: https://doc.qt.io/qt-5/qsurfaceformat.html#setDefaultFormat)
   QSurfaceFormat format;
+#if defined(Q_OS_ANDROID)
+  format.setRenderableType(QSurfaceFormat::OpenGLES);
+  format.setVersion(3, 0);
+  format.setProfile(QSurfaceFormat::NoProfile);
+  format.setSamples(0);
+#else
   format.setRenderableType(QSurfaceFormat::OpenGL);
   format.setVersion(2, 1);
   format.setProfile(QSurfaceFormat::CompatibilityProfile);
-  format.setDepthBufferSize(24);
   format.setSamples(4);
+#endif
+  format.setDepthBufferSize(24);
   QSurfaceFormat::setDefaultFormat(format);
 
   // Makes all QOpenGLWidget in the application share a single context
@@ -318,6 +541,7 @@ int main(int argc, char* argv[])
   // QApplication must be created before QPreferenceStore because QPreferenceStore uses
   // QFileSystemWatcher, which requires a QApplication instance
   auto app = QApplication{argc, argv};
+  installAndroidFileDialogEventFilter();
 
   // PreferenceManager is destroyed by TrenchBroomApp::~TrenchBroomApp()
   PreferenceManager::createInstance(
@@ -338,12 +562,25 @@ int main(int argc, char* argv[])
   installFileEventFilter(*appController);
 #endif
 
+#if defined(Q_OS_ANDROID)
+  QTimer::singleShot(1500, []() { requestAndroidStoragePermissions(); });
+#else
   appController->askForAutoUpdates();
   appController->triggerAutoUpdateCheck();
+#endif
 
   if (!parseCommandLineAndOpenFiles(*appController))
   {
+#if defined(Q_OS_ANDROID)
+    QTimer::singleShot(0, [&]() {
+      if (!appController->newDocument())
+      {
+        appController->showWelcomeWindow();
+      }
+    });
+#else
     appController->showWelcomeWindow();
+#endif
   }
 
   return app.exec();

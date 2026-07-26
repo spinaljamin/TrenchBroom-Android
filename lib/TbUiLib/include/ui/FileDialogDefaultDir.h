@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <QFileDialog>
 #include <QString>
 
 namespace tb::ui
@@ -38,6 +39,7 @@ enum class FileDialogDir
  * Gets the default directory from QSettings to use for the given type of file chooser.
  */
 QString fileDialogDefaultDirectory(FileDialogDir type);
+QFileDialog::Options fileDialogOptions();
 
 void updateFileDialogDefaultDirectoryWithFilename(
   FileDialogDir type, const QString& filename);

@@ -19,6 +19,7 @@
 
 #include "ui/PreferenceDialog.h"
 
+#include <QAbstractButton>
 #include <QBoxLayout>
 #include <QCloseEvent>
 #include <QDialogButtonBox>
@@ -56,6 +57,17 @@ namespace
 constexpr int PreferenceDialogMinWidth = 800;
 constexpr int PreferenceDialogMinHeight = 300;
 
+#if defined(Q_OS_ANDROID)
+void installAndroidButtonPressFilters(QWidget& widget, QObject& filter)
+{
+  for (auto* button : widget.findChildren<QAbstractButton*>())
+  {
+    button->installEventFilter(&filter);
+  }
+}
+#else
+void installAndroidButtonPressFilters(QWidget&, QObject&) {}
+#endif
 } // namespace
 
 enum class PreferenceDialog::PrefPane
@@ -212,6 +224,7 @@ void PreferenceDialog::createGui()
 #endif
   layout->addWidget(m_stackedWidget, 1);
   layout->addLayout(wrapDialogButtonBox(m_buttonBox));
+  installAndroidButtonPressFilters(*this, *this);
 }
 
 QSize PreferenceDialog::initialDialogSize() const
@@ -264,6 +277,30 @@ void PreferenceDialog::resetToDefaults()
 // Don't display tooltips for pane switcher buttons...
 bool PreferenceDialog::eventFilter(QObject* o, QEvent* e)
 {
+#if defined(Q_OS_ANDROID)
+  if (auto* button = qobject_cast<QAbstractButton*>(o))
+  {
+    if (e->type() == QEvent::MouseButtonPress)
+    {
+      const auto pressed = button->isEnabled();
+      button->setProperty("tbAndroidPressed", pressed);
+      button->setDown(false);
+      if (pressed)
+      {
+        button->click();
+      }
+      e->accept();
+      return true;
+    }
+    if (e->type() == QEvent::MouseButtonRelease && button->property("tbAndroidPressed").toBool())
+    {
+      button->setProperty("tbAndroidPressed", false);
+      button->setDown(false);
+      e->accept();
+      return true;
+    }
+  }
+#endif
   return e->type() != QEvent::ToolTip ? QDialog::eventFilter(o, e) : true;
 }
 

@@ -28,6 +28,7 @@
 #include <filesystem>
 #include <ranges>
 #include <string>
+#include <variant>
 
 namespace tb::gl
 {
@@ -68,6 +69,40 @@ void ShaderManager::setCurrentProgram(ShaderProgram* program)
 
 Result<ShaderProgram> ShaderManager::createProgram(Gl& gl, const ShaderConfig& config)
 {
+#if defined(ANDROID)
+  return createShaderProgram(gl, config.name) | kdl::and_then([&](auto program) {
+           auto vertexPaths = std::vector<std::filesystem::path>{};
+           for (const auto& path : config.vertexShaders)
+           {
+             vertexPaths.push_back(m_findShaderFunc(std::filesystem::path{"shader"} / path));
+           }
+           auto vertexShader = tb::gl::loadShader(
+             gl, config.name + " vertex stage", vertexPaths, GL_VERTEX_SHADER);
+           if (vertexShader.is_error())
+           {
+             return Result<ShaderProgram>{std::get<Error>(std::move(vertexShader).error())};
+           }
+           auto vertexShaderValue = std::move(vertexShader).value();
+           program.attach(gl, vertexShaderValue);
+
+           auto fragmentPaths = std::vector<std::filesystem::path>{};
+           for (const auto& path : config.fragmentShaders)
+           {
+             fragmentPaths.push_back(m_findShaderFunc(std::filesystem::path{"shader"} / path));
+           }
+           auto fragmentShader = tb::gl::loadShader(
+             gl, config.name + " fragment stage", fragmentPaths, GL_FRAGMENT_SHADER);
+           if (fragmentShader.is_error())
+           {
+             return Result<ShaderProgram>{std::get<Error>(std::move(fragmentShader).error())};
+           }
+           auto fragmentShaderValue = std::move(fragmentShader).value();
+           program.attach(gl, fragmentShaderValue);
+
+           return program.link(gl)
+                  | kdl::transform([&]() { return std::move(program); });
+         });
+#else
   return createShaderProgram(gl, config.name) | kdl::and_then([&](auto program) {
            return config.vertexShaders | std::views::transform([&](const auto& path) {
                     return loadShader(gl, path, GL_VERTEX_SHADER)
@@ -88,6 +123,7 @@ Result<ShaderProgram> ShaderManager::createProgram(Gl& gl, const ShaderConfig& c
              return program.link(gl)
                     | kdl::transform([&]() { return std::move(program); });
            });
+#endif
 }
 
 Result<std::reference_wrapper<Shader>> ShaderManager::loadShader(

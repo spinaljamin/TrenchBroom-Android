@@ -26,6 +26,7 @@
 
 #include "Result.h"
 
+#include "kd/path_hash.h"
 #include "kd/reflection_decl.h"
 
 #include <filesystem>
@@ -66,7 +67,7 @@ struct LockFileError
 
 } // namespace PreferenceErrors
 
-using PreferenceValues = std::unordered_map<std::filesystem::path, QJsonValue>;
+using PreferenceValues = std::unordered_map<std::filesystem::path, QJsonValue, kdl::path_hash>;
 
 using ReadPreferencesResult = Result<
   PreferenceValues, // Success case

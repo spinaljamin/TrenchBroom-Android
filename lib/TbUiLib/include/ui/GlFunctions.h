@@ -19,14 +19,27 @@
 
 #pragma once
 
-class QOpenGLContext;
-class QOpenGLFunctions_2_1;
-
 #include <string_view>
+
+#include <QtGlobal>
+
+#if defined(Q_OS_ANDROID)
+#include <QOpenGLFunctions>
+#else
+class QOpenGLFunctions_2_1;
+#endif
+
+class QOpenGLContext;
 
 namespace tb::ui
 {
 
-QOpenGLFunctions_2_1& getGlFunctions(std::string_view callSite, QOpenGLContext* context);
+#if defined(Q_OS_ANDROID)
+using OpenGLFunctions = QOpenGLFunctions;
+#else
+using OpenGLFunctions = QOpenGLFunctions_2_1;
+#endif
+
+OpenGLFunctions& getGlFunctions(std::string_view callSite, QOpenGLContext* context);
 
 } // namespace tb::ui

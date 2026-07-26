@@ -19,4 +19,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
   )
 endif()
 
-add_subdirectory(test)
+if(NOT ANDROID)
+  add_subdirectory(test)
+endif()

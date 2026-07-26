@@ -19,6 +19,8 @@
 
 #include "ui/SelectionTool.h"
 
+#include <QtSystemDetection>
+
 #include "PreferenceManager.h"
 #include "Preferences.h"
 #include "mdl/BrushFace.h"
@@ -242,8 +244,8 @@ public:
       const auto hit =
         firstHit(inputState, type(mdl::nodeHitType()) && isNodeSelectable(editorContext));
       if (hit.isMatch())
-      {
-        auto* node = findOutermostClosedGroupOrNode(mdl::hitToNode(hit));
+    {
+auto* node = findOutermostClosedGroupOrNode(mdl::hitToNode(hit));
         if (!node->selected() && editorContext.selectable(*node))
         {
           selectNodes(m_map, {node});
@@ -348,7 +350,7 @@ bool SelectionTool::mouseClick(const InputState& inputState)
       firstHit(inputState, type(mdl::nodeHitType()) && isNodeSelectable(editorContext));
     if (hit.isMatch())
     {
-      auto* node = findOutermostClosedGroupOrNode(mdl::hitToNode(hit));
+auto* node = findOutermostClosedGroupOrNode(mdl::hitToNode(hit));
       if (editorContext.selectable(*node))
       {
         if (isMultiClick(inputState))
@@ -379,7 +381,7 @@ bool SelectionTool::mouseClick(const InputState& inputState)
     }
     else
     {
-      deselectAll(map);
+deselectAll(map);
     }
   }
 

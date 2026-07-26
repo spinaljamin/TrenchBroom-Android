@@ -23,10 +23,10 @@
 namespace tb
 {
 
-template struct ColorComponentType<ColorChannel::r, float, 0.0f, 1.0f, 0.0f>;
-template struct ColorComponentType<ColorChannel::g, float, 0.0f, 1.0f, 0.0f>;
-template struct ColorComponentType<ColorChannel::b, float, 0.0f, 1.0f, 0.0f>;
-template struct ColorComponentType<ColorChannel::a, float, 0.0f, 1.0f, 1.0f>;
+template struct ColorComponentType<ColorChannel::r, float, 0, 1, 0>;
+template struct ColorComponentType<ColorChannel::g, float, 0, 1, 0>;
+template struct ColorComponentType<ColorChannel::b, float, 0, 1, 0>;
+template struct ColorComponentType<ColorChannel::a, float, 0, 1, 1>;
 
 template struct ColorComponentType<ColorChannel::r, uint8_t, 0, 255, 0>;
 template struct ColorComponentType<ColorChannel::g, uint8_t, 0, 255, 0>;

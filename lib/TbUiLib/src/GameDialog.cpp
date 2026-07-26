@@ -19,11 +19,14 @@
 
 #include "ui/GameDialog.h"
 
+#include <QAbstractButton>
 #include <QBoxLayout>
 #include <QComboBox>
+#include <QEvent>
 #include <QDialogButtonBox>
 #include <QLabel>
 #include <QPushButton>
+#include <QtSystemDetection>
 
 #include "PreferenceManager.h"
 #include "mdl/GameManager.h"
@@ -44,6 +47,56 @@ Q_DECLARE_METATYPE(tb::mdl::MapFormat)
 namespace tb::ui
 {
 
+namespace
+{
+
+#if defined(Q_OS_ANDROID)
+class AndroidDialogButtonPressFilter : public QObject
+{
+private:
+  bool m_pressed = false;
+
+public:
+  using QObject::QObject;
+
+  bool eventFilter(QObject* watched, QEvent* event) override
+  {
+    auto* button = qobject_cast<QAbstractButton*>(watched);
+    if (!button)
+    {
+      return false;
+    }
+    if (event->type() == QEvent::MouseButtonPress)
+    {
+      m_pressed = button->isEnabled();
+      button->setDown(false);
+      if (m_pressed)
+      {
+        button->click();
+      }
+      event->accept();
+      return true;
+    }
+    if (event->type() == QEvent::MouseButtonRelease && m_pressed)
+    {
+      m_pressed = false;
+      button->setDown(false);
+      event->accept();
+      return true;
+    }
+    return false;
+  }
+};
+
+void installAndroidDialogButtonPressFilter(QAbstractButton* button)
+{
+  button->installEventFilter(new AndroidDialogButtonPressFilter{button});
+}
+#else
+void installAndroidDialogButtonPressFilter(QAbstractButton*) {}
+#endif
+
+} // namespace
 std::optional<std::tuple<std::string, mdl::MapFormat>> GameDialog::showNewDocumentDialog(
   AppController& appController, QWidget* parent)
 {
@@ -164,6 +217,10 @@ void GameDialog::createGui(const QString& title, const QString& infoText)
 
   m_okButton = buttonBox->button(QDialogButtonBox::Ok);
   m_okButton->setEnabled(false);
+#if defined(Q_OS_ANDROID)
+  installAndroidDialogButtonPressFilter(m_okButton);
+  installAndroidDialogButtonPressFilter(buttonBox->button(QDialogButtonBox::Cancel));
+#endif
 
   auto* outerLayout = new QVBoxLayout{};
   outerLayout->setContentsMargins(QMargins{});
@@ -192,6 +249,9 @@ QWidget* GameDialog::createInfoPanel(const QString& title, const QString& infoTe
   m_openPreferencesButton = new QPushButton{"Open preferences..."};
   m_openPreferencesButton->setToolTip(
     "Open the preferences dialog to manage game paths,");
+#if defined(Q_OS_ANDROID)
+  installAndroidDialogButtonPressFilter(m_openPreferencesButton);
+#endif
 
   auto* layout = new QVBoxLayout{};
   layout->setSpacing(0);

@@ -21,6 +21,9 @@
 
 #include <QApplication>
 #include <QtSystemDetection>
+#if defined(Q_OS_ANDROID)
+#include <android/log.h>
+#endif
 
 #include "kd/contracts.h"
 #include "kd/overload.h"
@@ -232,6 +235,32 @@ kdl_reflect_impl(CancelEvent);
 
 namespace
 {
+#if defined(Q_OS_ANDROID)
+void tbAndroidInputLog(
+  const char* phase,
+  const MouseEvent::Type type,
+  const MouseEvent::Button button,
+  const QMouseEvent& qEvent,
+  const float posX,
+  const float posY,
+  const bool anyDown,
+  const bool dragging)
+{
+  __android_log_print(
+    ANDROID_LOG_WARN,
+    "TrenchBroomInput",
+    "%s type=%d button=%d qtButton=%d qtButtons=%d pos=%.1f,%.1f anyDown=%d dragging=%d",
+    phase,
+    static_cast<int>(type),
+    static_cast<int>(button),
+    static_cast<int>(qEvent.button()),
+    static_cast<int>(qEvent.buttons().toInt()),
+    double(posX),
+    double(posY),
+    anyDown ? 1 : 0,
+    dragging ? 1 : 0);
+}
+#endif
 bool collateEvents(InputEvent& lhs, const InputEvent& rhs)
 {
   return std::visit(
@@ -282,9 +311,26 @@ void InputEventRecorder::recordEvent(const QMouseEvent& qEvent)
   auto button = getButton(qEvent);
   const auto posX = static_cast<float>(qEvent.position().x());
   const auto posY = static_cast<float>(qEvent.position().y());
+#if defined(Q_OS_ANDROID)
+  tbAndroidInputLog("record", type, button, qEvent, posX, posY, m_anyMouseButtonDown, m_dragging);
+#endif
 
   if (type == MouseEvent::Type::Down)
   {
+#if defined(Q_OS_ANDROID)
+    if (m_anyMouseButtonDown || m_dragging)
+    {
+      m_queue.enqueueEvent(CancelEvent{});
+      m_dragging = false;
+      m_anyMouseButtonDown = false;
+      m_lastMouseButton = MouseEvent::Button::None;
+    }
+    if (button == MouseEvent::Button::None)
+    {
+      button = MouseEvent::Button::Left;
+    }
+#endif
+
     // macOS: apply Ctrl+click = right click emulation
     // (Implemented ourselves rather than using Qt's implementation to work around Qt bug,
     // see Main.cpp)
@@ -298,11 +344,24 @@ void InputEventRecorder::recordEvent(const QMouseEvent& qEvent)
     m_lastClickY = posY;
     m_lastClickTime = std::chrono::high_resolution_clock::now();
     m_anyMouseButtonDown = true;
+    m_lastMouseButton = button;
     m_queue.enqueueEvent(MouseEvent{MouseEvent::Type::Down, button, posX, posY});
+#if defined(Q_OS_ANDROID)
+    tbAndroidInputLog("down", type, button, qEvent, posX, posY, m_anyMouseButtonDown, m_dragging);
+#endif
   }
   else if (type == MouseEvent::Type::Up)
   {
     // macOS: apply Ctrl+click = right click
+#if defined(Q_OS_ANDROID)
+    if (button == MouseEvent::Button::None)
+    {
+      button = m_lastMouseButton != MouseEvent::Button::None
+                 ? m_lastMouseButton
+                 : MouseEvent::Button::Left;
+    }
+#endif
+
     if (m_nextMouseUpIsRMB)
     {
       m_nextMouseUpIsRMB = false;
@@ -317,7 +376,11 @@ void InputEventRecorder::recordEvent(const QMouseEvent& qEvent)
       const auto now = std::chrono::high_resolution_clock::now();
       const auto duration =
         std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastClickTime);
+#if defined(Q_OS_ANDROID)
+      const auto minDuration = std::chrono::milliseconds(450);
+#else
       const auto minDuration = std::chrono::milliseconds(100);
+#endif
       if (duration < minDuration)
       {
         // This was an accidental drag.
@@ -344,11 +407,48 @@ void InputEventRecorder::recordEvent(const QMouseEvent& qEvent)
         MouseEvent{MouseEvent::Type::Click, button, m_lastClickX, m_lastClickY});
     }
     m_anyMouseButtonDown = false;
+    m_lastMouseButton = MouseEvent::Button::None;
     m_nextMouseUpIsDblClick = false;
     m_queue.enqueueEvent(MouseEvent{MouseEvent::Type::Up, button, posX, posY});
+#if defined(Q_OS_ANDROID)
+    tbAndroidInputLog("up", type, button, qEvent, posX, posY, m_anyMouseButtonDown, m_dragging);
+#endif
   }
   else if (type == MouseEvent::Type::Motion)
   {
+#if defined(Q_OS_ANDROID)
+    if (
+      qEvent.button() == Qt::NoButton && qEvent.buttons() == Qt::NoButton
+      && m_anyMouseButtonDown)
+    {
+      const auto lastButton = m_lastMouseButton != MouseEvent::Button::None
+                                ? m_lastMouseButton
+                                : MouseEvent::Button::Left;
+      if (m_dragging)
+      {
+        m_queue.enqueueEvent(MouseEvent{MouseEvent::Type::DragEnd, lastButton, posX, posY});
+      }
+      else
+      {
+        m_queue.enqueueEvent(
+          MouseEvent{MouseEvent::Type::Click, lastButton, m_lastClickX, m_lastClickY});
+      }
+      m_dragging = false;
+      m_anyMouseButtonDown = false;
+      m_lastMouseButton = MouseEvent::Button::None;
+      m_nextMouseUpIsDblClick = false;
+      m_queue.enqueueEvent(MouseEvent{MouseEvent::Type::Up, lastButton, posX, posY});
+      m_queue.enqueueEvent(MouseEvent{MouseEvent::Type::Motion, MouseEvent::Button::None, posX, posY});
+      tbAndroidInputLog("lost-up", type, lastButton, qEvent, posX, posY, m_anyMouseButtonDown, m_dragging);
+      return;
+    }
+    if (button == MouseEvent::Button::None && m_anyMouseButtonDown)
+    {
+      button = m_lastMouseButton != MouseEvent::Button::None
+                 ? m_lastMouseButton
+                 : MouseEvent::Button::Left;
+    }
+#endif
     if (!m_dragging && m_anyMouseButtonDown)
     {
       if (isDrag(posX, posY))
@@ -361,17 +461,35 @@ void InputEventRecorder::recordEvent(const QMouseEvent& qEvent)
     if (m_dragging)
     {
       m_queue.enqueueEvent(MouseEvent{MouseEvent::Type::Drag, button, posX, posY});
+#if defined(Q_OS_ANDROID)
+      tbAndroidInputLog("drag", type, button, qEvent, posX, posY, m_anyMouseButtonDown, m_dragging);
+#endif
     }
     else
     {
       m_queue.enqueueEvent(MouseEvent{MouseEvent::Type::Motion, button, posX, posY});
+#if defined(Q_OS_ANDROID)
+      tbAndroidInputLog("motion", type, button, qEvent, posX, posY, m_anyMouseButtonDown, m_dragging);
+#endif
     }
   }
   else if (type == MouseEvent::Type::DoubleClick)
   {
+#if defined(Q_OS_ANDROID)
+    cancelMouseDrag();
+    if (button == MouseEvent::Button::None)
+    {
+      button = MouseEvent::Button::Left;
+    }
+    m_queue.enqueueEvent(MouseEvent{MouseEvent::Type::Down, button, posX, posY});
+    m_queue.enqueueEvent(MouseEvent{MouseEvent::Type::Click, button, posX, posY});
+    m_queue.enqueueEvent(MouseEvent{MouseEvent::Type::Up, button, posX, posY});
+    tbAndroidInputLog("android-double-click", type, button, qEvent, posX, posY, false, false);
+#else
     m_queue.enqueueEvent(MouseEvent{MouseEvent::Type::Down, button, posX, posY});
     m_queue.enqueueEvent(MouseEvent{MouseEvent::Type::DoubleClick, button, posX, posY});
     m_nextMouseUpIsDblClick = true;
+#endif
   }
   else
   {
@@ -479,6 +597,19 @@ void InputEventRecorder::recordEvent(const QNativeGestureEvent& qEvent)
   }
 }
 
+void InputEventRecorder::cancelMouseDrag()
+{
+  if (m_anyMouseButtonDown || m_dragging)
+  {
+    m_queue.enqueueEvent(CancelEvent{});
+  }
+  m_dragging = false;
+  m_anyMouseButtonDown = false;
+  m_lastMouseButton = MouseEvent::Button::None;
+  m_nextMouseUpIsRMB = false;
+  m_nextMouseUpIsDblClick = false;
+}
+
 void InputEventRecorder::processEvents(InputEventProcessor& processor)
 {
   m_queue.processEvents(processor);
@@ -486,7 +617,11 @@ void InputEventRecorder::processEvents(InputEventProcessor& processor)
 
 bool InputEventRecorder::isDrag(const float posX, const float posY) const
 {
+#if defined(Q_OS_ANDROID)
+  constexpr auto MinDragDistance = 6.0f;
+#else
   constexpr auto MinDragDistance = 2.0f;
+#endif
 
   return std::abs(posX - m_lastClickX) > MinDragDistance
          || std::abs(posY - m_lastClickY) > MinDragDistance;
@@ -529,26 +664,52 @@ MouseEvent::Type InputEventRecorder::getEventType(const QMouseEvent& qEvent)
 
 MouseEvent::Button InputEventRecorder::getButton(const QMouseEvent& qEvent)
 {
-  if (qEvent.button() == Qt::LeftButton)
+#if defined(Q_OS_ANDROID)
+  const auto button = qEvent.button();
+  const auto buttons = qEvent.buttons();
+  if (button == Qt::LeftButton || buttons.testFlag(Qt::LeftButton))
   {
     return MouseEvent::Button::Left;
   }
-  if (qEvent.button() == Qt::MiddleButton)
+  if (button == Qt::MiddleButton || buttons.testFlag(Qt::MiddleButton))
   {
     return MouseEvent::Button::Middle;
   }
-  if (qEvent.button() == Qt::RightButton)
+  if (button == Qt::RightButton || buttons.testFlag(Qt::RightButton))
   {
     return MouseEvent::Button::Right;
   }
-  if (qEvent.button() == Qt::XButton1)
+  if (button == Qt::XButton1 || buttons.testFlag(Qt::XButton1))
   {
     return MouseEvent::Button::Aux1;
   }
-  if (qEvent.button() == Qt::XButton2)
+  if (button == Qt::XButton2 || buttons.testFlag(Qt::XButton2))
   {
     return MouseEvent::Button::Aux2;
   }
+#else
+  const auto button = qEvent.button();
+  if (button == Qt::LeftButton)
+  {
+    return MouseEvent::Button::Left;
+  }
+  if (button == Qt::MiddleButton)
+  {
+    return MouseEvent::Button::Middle;
+  }
+  if (button == Qt::RightButton)
+  {
+    return MouseEvent::Button::Right;
+  }
+  if (button == Qt::XButton1)
+  {
+    return MouseEvent::Button::Aux1;
+  }
+  if (button == Qt::XButton2)
+  {
+    return MouseEvent::Button::Aux2;
+  }
+#endif
   return MouseEvent::Button::None;
 }
 

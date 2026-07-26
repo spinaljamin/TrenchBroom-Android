@@ -657,8 +657,12 @@ private: // parsing
     };
 
     // Load the materials
-    auto materials = scene.materialPaths | std::views::transform(loadMaterial)
-                     | kdl::ranges::to<std::vector>();
+    auto materials = std::vector<gl::Material>{};
+    materials.reserve(scene.materialPaths.size() + 1u);
+    for (const auto& materialPath : scene.materialPaths)
+    {
+      materials.push_back(loadMaterial(materialPath));
+    }
 
     materials.push_back(m_loadMaterial(DefaultTexturePath));
 

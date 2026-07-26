@@ -76,9 +76,13 @@ void loadSurfaceMaterials(
   const std::vector<std::filesystem::path>& shaderPaths,
   const LoadMaterialFunc& loadMaterial)
 {
-  using std::views::transform;
-  surface.setSkins(
-    shaderPaths | transform(loadMaterial) | kdl::ranges::to<std::vector>());
+  auto materials = std::vector<gl::Material>{};
+  materials.reserve(shaderPaths.size());
+  for (const auto& shaderPath : shaderPaths)
+  {
+    materials.push_back(loadMaterial(shaderPath));
+  }
+  surface.setSkins(std::move(materials));
 }
 
 Result<void> parseSurfaces(

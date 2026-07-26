@@ -56,4 +56,6 @@ target_link_libraries(TbRenderLib
     VmLib
 )
 
-add_subdirectory(test)
+if(NOT ANDROID)
+  add_subdirectory(test)
+endif()

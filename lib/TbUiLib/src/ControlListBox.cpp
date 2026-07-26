@@ -19,11 +19,13 @@
 
 #include "ui/ControlListBox.h"
 
+#include <QFontMetrics>
 #include <QLabel>
 #include <QListWidget>
 #include <QMouseEvent>
 #include <QSizePolicy>
 #include <QVBoxLayout>
+#include <QtSystemDetection>
 
 #include "ui/BorderLine.h"
 #include "ui/QStyleUtils.h"

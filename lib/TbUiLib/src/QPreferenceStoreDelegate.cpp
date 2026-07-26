@@ -47,8 +47,8 @@ namespace
 {
 
 std::vector<std::filesystem::path> changedKeysForMapDiff(
-  const std::unordered_map<std::filesystem::path, QJsonValue>& before,
-  const std::unordered_map<std::filesystem::path, QJsonValue>& after)
+  const PreferenceValues& before,
+  const PreferenceValues& after)
 {
   auto result = std::vector<std::filesystem::path>{};
 

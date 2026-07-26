@@ -168,7 +168,7 @@ void GameEngineProfileEditor::pathChanged()
 void GameEngineProfileEditor::changePathClicked()
 {
   const auto pathStr = QFileDialog::getOpenFileName(
-    this, tr("Choose Engine"), fileDialogDefaultDirectory(FileDialogDir::Engine));
+    this, tr("Choose Engine"), fileDialogDefaultDirectory(FileDialogDir::Engine), QString{}, nullptr, fileDialogOptions());
   if (!pathStr.isEmpty())
   {
     updateFileDialogDefaultDirectoryWithFilename(FileDialogDir::Engine, pathStr);

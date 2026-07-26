@@ -173,19 +173,22 @@ void GameFileSystem::addFileSystemPackages(
       searchPath,
       fs::TraversalMode::Flat,
       fs::makeExtensionPathMatcher(packageExtensions))
-      | kdl::and_then([&](auto packagePaths) {
+      | kdl::transform([&](auto packagePaths) {
           std::ranges::sort(packagePaths);
-          return packagePaths | kdl::views::as_rvalue
-                 | std::views::transform([&](auto absPackagePath) {
-                     return createImageFileSystem(packageFormat, absPackagePath)
-                            | kdl::transform([&](auto fs) {
-                                logger.info()
-                                  << "Adding file system package "
-                                  << absPackagePath.lexically_relative(searchPath);
-                                mount("", std::move(fs));
-                              });
-                   })
-                 | kdl::fold;
+          for (auto absPackagePath : packagePaths)
+          {
+            createImageFileSystem(packageFormat, absPackagePath)
+              | kdl::transform([&](auto fs) {
+                  logger.info() << "Adding file system package "
+                                << absPackagePath.lexically_relative(searchPath);
+                  mount("", std::move(fs));
+                })
+              | kdl::transform_error([&](auto e) {
+                  logger.error() << "Could not add file system package "
+                                 << absPackagePath.lexically_relative(searchPath) << ": "
+                                 << e.msg;
+                });
+          }
         })
       | kdl::transform_error([&](auto e) {
           logger.error() << "Could not add file system packages: " << e.msg;

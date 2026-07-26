@@ -21,4 +21,6 @@ target_link_libraries(TbBaseTestUtilsLib
     TbBaseLib
 )
 
-add_subdirectory(test)
+if(NOT ANDROID)
+  add_subdirectory(test)
+endif()

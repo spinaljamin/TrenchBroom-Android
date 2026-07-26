@@ -98,28 +98,28 @@ constexpr bool isWithinRange(const U u) noexcept
 
 } // namespace detail
 
-template <ColorChannel Ch, typename T, T Min, T Max, T DefaultValue = Min>
+template <ColorChannel Ch, typename T, auto Min, auto Max, auto DefaultValue = Min>
 struct ColorComponentType
 {
   static constexpr auto Channel = Ch;
   using ValueType = T;
   using NormalizedValueType = double;
 
-  static constexpr auto min = Min;
-  static constexpr auto max = Max;
+  static constexpr auto min = ValueType(Min);
+  static constexpr auto max = ValueType(Max);
 
   template <typename U>
   static constexpr bool inValueRange(const U value)
   {
-    return detail::isWithinRange<ValueType>(value) && ValueType(value) >= Min
-           && ValueType(value) <= Max;
+    return detail::isWithinRange<ValueType>(value) && ValueType(value) >= ValueType(Min)
+           && ValueType(value) <= ValueType(Max);
   }
 
-  static constexpr ValueType defaultValue() { return DefaultValue; }
+  static constexpr ValueType defaultValue() { return ValueType(DefaultValue); }
 
   static constexpr NormalizedValueType normalizeValue(const ValueType v)
   {
-    return NormalizedValueType(v - Min) / NormalizedValueType(Max - Min);
+    return NormalizedValueType(v - ValueType(Min)) / NormalizedValueType(ValueType(Max) - ValueType(Min));
   }
 
   static constexpr ValueType fromNormalizedValue(const NormalizedValueType v)
@@ -151,7 +151,7 @@ struct IsColorComponentType : std::false_type
 {
 };
 
-template <ColorChannel Ch, typename T, T Min, T Max, T DefaultValue>
+template <ColorChannel Ch, typename T, auto Min, auto Max, auto DefaultValue>
 struct IsColorComponentType<ColorComponentType<Ch, T, Min, Max, DefaultValue>>
   : std::true_type
 {

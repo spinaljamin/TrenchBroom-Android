@@ -62,5 +62,9 @@ target_link_libraries(TbGlLib
     VmLib
 )
 
-add_subdirectory(test)
-add_subdirectory(test-utils)
+if(NOT ANDROID)
+  add_subdirectory(test)
+endif()
+if(NOT ANDROID)
+  add_subdirectory(test-utils)
+endif()

@@ -37,8 +37,10 @@
 
 #include "kd/path_utils.h"
 
+#if !defined(Q_OS_ANDROID)
 #include <cpptrace/basic.hpp>
 #include <cpptrace/from_current.hpp>
+#endif
 #include <fmt/format.h>
 #include <fmt/std.h>
 
@@ -59,6 +61,26 @@ namespace
 AppController* appControllerForCrashReporter = nullptr;
 bool crashReporterGuiEnabled = true;
 bool crashReporterIsReportingCrash = false;
+
+#if defined(Q_OS_ANDROID)
+struct AndroidStacktraceStub
+{
+  void print(std::ostream& stream) const
+  {
+    stream << "Stack trace unavailable on this Android test build." << std::endl;
+  }
+};
+
+AndroidStacktraceStub generateCrashTrace()
+{
+  return {};
+}
+#else
+cpptrace::stacktrace generateCrashTrace()
+{
+  return cpptrace::generate_trace();
+}
+#endif
 
 const MapDocument* topDocument()
 {
@@ -126,8 +148,7 @@ std::filesystem::path crashReportBasePath()
   return kdl::path_remove_extension(testCrashLogPath);
 }
 
-[[noreturn]] void reportCrashAndExit(
-  const cpptrace::stacktrace& stacktrace, const std::string& reason)
+[[noreturn]] void reportCrashAndExit(const auto& stacktrace, const std::string& reason)
 {
   // just abort if we reenter reportCrashAndExit (i.e. if it crashes)
   if (std::exchange(crashReporterIsReportingCrash, true))
@@ -195,14 +216,14 @@ std::filesystem::path crashReportBasePath()
 LONG WINAPI TrenchBroomUnhandledExceptionFilter(PEXCEPTION_POINTERS pExceptionPtrs)
 {
   reportCrashAndExit(
-    cpptrace::generate_trace(),
+    generateCrashTrace(),
     std::to_string(pExceptionPtrs->ExceptionRecord->ExceptionCode));
   // return EXCEPTION_EXECUTE_HANDLER; unreachable
 }
 #else
 void CrashHandler(const int /* signum */)
 {
-  reportCrashAndExit(cpptrace::generate_trace(), "SIGSEGV");
+  reportCrashAndExit(generateCrashTrace(), "SIGSEGV");
 }
 #endif
 
@@ -224,7 +245,7 @@ CrashReporter::CrashReporter(AppController& appController)
 
 [[noreturn]] void CrashReporter::reportCrashAndExit(const std::string& reason)
 {
-  tb::ui::reportCrashAndExit(cpptrace::generate_trace(), reason);
+  tb::ui::reportCrashAndExit(generateCrashTrace(), reason);
 }
 
 } // namespace tb::ui

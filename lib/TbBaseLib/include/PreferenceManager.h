@@ -23,6 +23,8 @@
 #include "Preference.h"
 #include "PreferenceStore.h"
 
+#include "kd/path_hash.h"
+
 #include <any>
 #include <functional>
 #include <memory>
@@ -59,8 +61,8 @@ private:
   std::unique_ptr<PreferenceStore> m_preferenceStore;
   bool m_saveInstantly;
 
-  std::unordered_map<std::filesystem::path, std::any> m_values;
-  std::unordered_map<std::filesystem::path, PendingState> m_pendingValues;
+  std::unordered_map<std::filesystem::path, std::any, kdl::path_hash> m_values;
+  std::unordered_map<std::filesystem::path, PendingState, kdl::path_hash> m_pendingValues;
 
   NotifierConnection m_notifierConnection;
 

@@ -139,7 +139,7 @@ void WelcomeWindow::openOtherDocument()
     nullptr,
     tr("Open Map"),
     fileDialogDefaultDirectory(FileDialogDir::Map),
-    "Map files (*.map);;Any files (*.*)");
+    "Map files (*.map);;Any files (*.*)", nullptr, fileDialogOptions());
   const auto path = pathFromQString(pathStr);
 
   if (!path.empty())

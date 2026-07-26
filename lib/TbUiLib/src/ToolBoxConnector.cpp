@@ -304,6 +304,7 @@ void ToolBoxConnector::processEvent(const CancelEvent&)
 
 void ToolBoxConnector::processMouseButtonDown(const MouseEvent& event)
 {
+  mouseMoved(event.posX, event.posY);
   updateModifierKeys();
   m_inputState.mouseDown(mouseButton(event));
   m_toolBox->mouseDown(*m_toolChain, m_inputState);
@@ -314,6 +315,7 @@ void ToolBoxConnector::processMouseButtonDown(const MouseEvent& event)
 
 void ToolBoxConnector::processMouseButtonUp(const MouseEvent& event)
 {
+  mouseMoved(event.posX, event.posY);
   updateModifierKeys();
   m_toolBox->mouseUp(*m_toolChain, m_inputState);
   m_inputState.mouseUp(mouseButton(event));
@@ -324,6 +326,8 @@ void ToolBoxConnector::processMouseButtonUp(const MouseEvent& event)
 
 void ToolBoxConnector::processMouseClick(const MouseEvent& event)
 {
+  mouseMoved(event.posX, event.posY);
+  updatePickResult();
   const auto handled = m_toolBox->mouseClick(*m_toolChain, m_inputState);
   if (event.button == MouseEvent::Button::Right && !handled)
   {
@@ -337,6 +341,7 @@ void ToolBoxConnector::processMouseClick(const MouseEvent& event)
 
 void ToolBoxConnector::processMouseDoubleClick(const MouseEvent& event)
 {
+  mouseMoved(event.posX, event.posY);
   updateModifierKeys();
   m_inputState.mouseDown(mouseButton(event));
   m_toolBox->mouseDoubleClick(*m_toolChain, m_inputState);

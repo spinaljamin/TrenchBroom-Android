@@ -25,7 +25,11 @@
 #else
 #endif
 
+#include <cerrno>
 #include <charconv>
+#include <cstdlib>
+#include <string>
+#include <type_traits>
 #include <concepts>
 
 namespace vm
@@ -47,10 +51,28 @@ template <
     std::chars_format
 #endif
   >
-constexpr auto from_chars(
+auto from_chars(
   const C* first, const C* last, F& value, const Fmt fmt = Fmt::general)
 {
-#if defined(__APPLE__)
+#if defined(__ANDROID__)
+  static_cast<void>(fmt);
+  const auto string = std::string{first, last};
+  char* end = nullptr;
+  errno = 0;
+  if constexpr (std::is_same_v<F, float>)
+  {
+    value = std::strtof(string.c_str(), &end);
+  }
+  else
+  {
+    value = std::strtod(string.c_str(), &end);
+  }
+  const auto offset = end - string.c_str();
+  const auto ec = end == string.c_str()      ? std::errc::invalid_argument
+                  : errno == ERANGE         ? std::errc::result_out_of_range
+                                            : std::errc{};
+  return std::from_chars_result{first + offset, ec};
+#elif defined(__APPLE__)
   return fast_float::from_chars(first, last, value, fmt);
 #else
   return std::from_chars(first, last, value, fmt);

@@ -23,19 +23,23 @@
 #include <QChildEvent>
 #include <QClipboard>
 #include <QComboBox>
+#include <QDir>
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QLabel>
 #include <QMessageBox>
+#include <QMenuBar>
 #include <QMimeData>
 #include <QPushButton>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QStatusBar>
 #include <QString>
 #include <QStringList>
 #include <QTableWidget>
 #include <QTimer>
 #include <QToolBar>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QtGlobal>
 
@@ -75,6 +79,7 @@
 #include "mdl/VisualEffect.h"
 #include "mdl/WorldNode.h"
 #include "ui/Action.h"
+#include "ui/FileDialogDefaultDir.h"
 #include "ui/ActionBuilder.h"
 #include "ui/ActionExecutionContext.h"
 #include "ui/ActionManager.h"
@@ -318,6 +323,9 @@ void MapWindow::updateTitleDelayed()
 
 void MapWindow::createMenus()
 {
+#if defined(Q_OS_ANDROID)
+  menuBar()->setNativeMenuBar(false);
+#endif
   auto createMenuResult = populateMenuBar(
     m_appController.actionManager(), *menuBar(), m_actionMap, [&](const Action& action) {
       auto context = ActionExecutionContext{m_appController, this, currentMapViewBase()};
@@ -398,12 +406,18 @@ void MapWindow::updateUndoRedoActions()
 
 void MapWindow::addRecentDocumentsMenu()
 {
-  m_appController.recentDocuments().addMenu(*m_recentDocumentsMenu);
+  if (m_recentDocumentsMenu)
+  {
+    m_appController.recentDocuments().addMenu(*m_recentDocumentsMenu);
+  }
 }
 
 void MapWindow::removeRecentDocumentsMenu()
 {
-  m_appController.recentDocuments().removeMenu(*m_recentDocumentsMenu);
+  if (m_recentDocumentsMenu)
+  {
+    m_appController.recentDocuments().removeMenu(*m_recentDocumentsMenu);
+  }
 }
 
 void MapWindow::updateRecentDocumentsMenu()
@@ -501,6 +515,8 @@ void MapWindow::createToolBar()
     m_appController.actionManager(), *m_toolBar, m_actionMap, [&](const auto& tbAction) {
       auto context = ActionExecutionContext{m_appController, this, currentMapViewBase()};
       tbAction.execute(context);
+      updateActionState();
+      updateUndoRedoActions();
     });
 
   m_gridChoice = new QComboBox{};
@@ -513,6 +529,29 @@ void MapWindow::createToolBar()
   }
 
   m_toolBar->addWidget(m_gridChoice);
+#if defined(Q_OS_ANDROID)
+  auto* decGridButton = new QToolButton{m_toolBar};
+  decGridButton->setText("-");
+  decGridButton->setToolTip(tr("Decrease Grid Size"));
+  decGridButton->setMinimumSize(QSize{48, 48});
+  connect(decGridButton, &QToolButton::pressed, this, [this]() {
+    decGridSize();
+    updateToolBarWidgets();
+    updateActionState();
+  });
+  m_toolBar->addWidget(decGridButton);
+
+  auto* incGridButton = new QToolButton{m_toolBar};
+  incGridButton->setText("+");
+  incGridButton->setToolTip(tr("Increase Grid Size"));
+  incGridButton->setMinimumSize(QSize{48, 48});
+  connect(incGridButton, &QToolButton::pressed, this, [this]() {
+    incGridSize();
+    updateToolBarWidgets();
+    updateActionState();
+  });
+  m_toolBar->addWidget(incGridButton);
+#endif
 }
 
 void MapWindow::updateToolBarWidgets()
@@ -520,6 +559,7 @@ void MapWindow::updateToolBarWidgets()
   const auto& map = m_document->map();
   const auto& grid = map.grid();
   const auto sizeIndex = grid.size() - mdl::Grid::MinSize;
+  const auto signalBlocker = QSignalBlocker{m_gridChoice};
   m_gridChoice->setCurrentIndex(sizeIndex);
 }
 
@@ -958,11 +998,24 @@ void MapWindow::bindEvents()
 {
   connect(m_autosaveTimer, &QTimer::timeout, this, &MapWindow::triggerAutosave);
   connect(qApp, &QApplication::focusChanged, this, &MapWindow::focusChange);
+  const auto setGridSizeFromChoice = [this](const int index) {
+    if (index >= 0)
+    {
+      setGridSize(index + mdl::Grid::MinSize);
+    }
+  };
   connect(
     m_gridChoice,
     QOverload<int>::of(&QComboBox::activated),
     this,
-    [this](const int index) { setGridSize(index + mdl::Grid::MinSize); });
+    setGridSizeFromChoice);
+#if defined(Q_OS_ANDROID)
+  connect(
+    m_gridChoice,
+    QOverload<int>::of(&QComboBox::currentIndexChanged),
+    this,
+    setGridSizeFromChoice);
+#endif
   connect(QApplication::clipboard(), &QClipboard::dataChanged, this, [this]() {
     // update the "Paste" menu items
     this->updateActionState();
@@ -1023,12 +1076,13 @@ bool MapWindow::saveDocumentAs()
 {
   auto& map = m_document->map();
 
-  const auto defaultPath = map.persistent()
-                             ? map.path()
-                             : m_appController.environmentConfig().userDataFolderPath;
+  const auto defaultPath =
+    map.persistent()
+      ? pathAsQPath(map.path())
+      : QDir{fileDialogDefaultDirectory(FileDialogDir::Map)}.filePath("untitled.map");
 
   const auto newFileName = QFileDialog::getSaveFileName(
-    this, tr("Save map file"), pathAsQPath(defaultPath), "Map files (*.map)");
+    this, tr("Save map file"), defaultPath, "Map files (*.map)", nullptr, fileDialogOptions());
   if (newFileName.isEmpty())
   {
     return false;
@@ -1086,7 +1140,7 @@ bool MapWindow::exportDocumentAsMap()
   const auto& originalPath = map.path();
 
   const auto newFileName = QFileDialog::getSaveFileName(
-    this, tr("Export Map file"), pathAsQPath(originalPath), "Map files (*.map)");
+    this, tr("Export Map file"), pathAsQPath(originalPath), "Map files (*.map)", nullptr, fileDialogOptions());
   if (newFileName.isEmpty())
   {
     return false;
@@ -1193,7 +1247,7 @@ void MapWindow::loadPointFile()
     this,
     tr("Load Point File"),
     defaultDir,
-    "Point files (*.pts *.lin);;Any files (*.*)");
+    "Point files (*.pts *.lin);;Any files (*.*)", nullptr, fileDialogOptions());
 
   if (!fileName.isEmpty())
   {
@@ -1234,7 +1288,7 @@ void MapWindow::loadPortalFile()
   const auto defaultDir = !path.empty() ? pathAsQPath(path.parent_path()) : QString{};
 
   const auto fileName = QFileDialog::getOpenFileName(
-    this, tr("Load Portal File"), defaultDir, "Portal files (*.prt);;Any files (*.*)");
+    this, tr("Load Portal File"), defaultDir, "Portal files (*.prt);;Any files (*.*)", nullptr, fileDialogOptions());
 
   if (!fileName.isEmpty())
   {
@@ -1374,7 +1428,13 @@ bool MapWindow::canCutSelection() const
 {
   const auto& map = m_document->map();
   const auto& selection = map.selection();
-  return widgetOrChildHasFocus(m_mapView) && selection.hasNodes()
+  const auto mapViewActive =
+#if defined(Q_OS_ANDROID)
+    m_mapView->isCurrent();
+#else
+    widgetOrChildHasFocus(m_mapView);
+#endif
+  return mapViewActive && selection.hasNodes()
          && !m_mapView->toolBox().anyModalToolActive();
 }
 
@@ -1382,7 +1442,13 @@ bool MapWindow::canCopySelection() const
 {
   const auto& map = m_document->map();
   const auto& selection = map.selection();
-  return widgetOrChildHasFocus(m_mapView)
+  const auto mapViewActive =
+#if defined(Q_OS_ANDROID)
+    m_mapView->isCurrent();
+#else
+    widgetOrChildHasFocus(m_mapView);
+#endif
+  return mapViewActive
          && (selection.hasNodes() || selection.hasBrushFaces());
 }
 
@@ -1455,7 +1521,11 @@ mdl::PasteType MapWindow::paste()
  */
 bool MapWindow::canPaste() const
 {
+#if defined(Q_OS_ANDROID)
+  if (!m_mapView->isCurrent())
+#else
   if (!widgetOrChildHasFocus(m_mapView) || !m_mapView->isCurrent())
+#endif
   {
     return false;
   }

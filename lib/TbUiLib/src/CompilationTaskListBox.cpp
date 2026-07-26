@@ -610,7 +610,7 @@ mdl::CompilationRunTool& CompilationRunToolTaskEditor::task()
 void CompilationRunToolTaskEditor::browseTool()
 {
   const QString toolSpec = QFileDialog::getOpenFileName(
-    this, tr("Select Tool"), fileDialogDefaultDirectory(FileDialogDir::CompileTool));
+    this, tr("Select Tool"), fileDialogDefaultDirectory(FileDialogDir::CompileTool), QString{}, nullptr, fileDialogOptions());
   if (!toolSpec.isEmpty())
   {
     updateFileDialogDefaultDirectoryWithFilename(FileDialogDir::CompileTool, toolSpec);

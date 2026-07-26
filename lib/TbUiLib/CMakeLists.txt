@@ -494,7 +494,6 @@ target_link_libraries(TbUiLib
     CompilerConfig
     PrecompileQtHeaders
     PrecompileStdHeaders
-    cpptrace::cpptrace
     ctre::ctre
     Qt6::Svg
   PUBLIC
@@ -528,5 +527,11 @@ if(APPLE)
     target_compile_definitions(TbUiLib PRIVATE GL_SILENCE_DEPRECATION)
 endif()
 
-add_subdirectory(test)
-add_subdirectory(test-utils)
+if(NOT ANDROID)
+  add_subdirectory(test)
+endif()
+if(NOT ANDROID)
+  add_subdirectory(test-utils)
+endif()
+
+target_link_libraries(TbUiLib PRIVATE $<$<NOT:$<BOOL:${ANDROID}>>:cpptrace::cpptrace>)

@@ -21,9 +21,14 @@
 
 #include <QDateTime>
 #include <QOpenGLContext>
+#if !defined(Q_OS_ANDROID)
 #include <QOpenGLFunctions_2_1>
+#endif
 #include <QPalette>
 #include <QTimer>
+#if defined(Q_OS_ANDROID)
+#include <QTouchEvent>
+#endif
 #include <QWidget>
 
 #include "PreferenceManager.h"
@@ -88,6 +93,9 @@ RenderView::RenderView(AppController& appController, QWidget* parent)
 
   setMouseTracking(true); // request mouse move events even when no button is held down
   setFocusPolicy(Qt::StrongFocus); // accept focus by clicking or tab
+#if defined(Q_OS_ANDROID)
+  setAttribute(Qt::WA_AcceptTouchEvents, true);
+#endif
 
   // Update any render view when resources were processed to reflect any changes
   m_notifierConnection +=
@@ -112,6 +120,17 @@ void RenderView::keyReleaseEvent(QKeyEvent* event)
 static auto mouseEventWithFullPrecisionLocalPos(
   const QWidget* widget, const QMouseEvent* event)
 {
+#if defined(Q_OS_ANDROID)
+  return QMouseEvent{
+    event->type(),
+    event->position(),
+    event->scenePosition(),
+    event->globalPosition(),
+    event->button(),
+    event->buttons(),
+    event->modifiers(),
+    event->source()};
+#else
   // The localPos of a Qt mouse event is only in integer coordinates, but window pos
   // and screen pos have full precision. We can't directly map the windowPos because
   // mapTo takes QPoint, so we just map the origin and subtract that.
@@ -126,6 +145,7 @@ static auto mouseEventWithFullPrecisionLocalPos(
     event->buttons(),
     event->modifiers(),
     event->source()};
+#endif
 }
 
 void RenderView::mouseDoubleClickEvent(QMouseEvent* event)
@@ -142,13 +162,13 @@ void RenderView::mouseMoveEvent(QMouseEvent* event)
 
 void RenderView::mousePressEvent(QMouseEvent* event)
 {
-  m_eventRecorder.recordEvent(mouseEventWithFullPrecisionLocalPos(this, event));
+m_eventRecorder.recordEvent(mouseEventWithFullPrecisionLocalPos(this, event));
   update();
 }
 
 void RenderView::mouseReleaseEvent(QMouseEvent* event)
 {
-  m_eventRecorder.recordEvent(mouseEventWithFullPrecisionLocalPos(this, event));
+m_eventRecorder.recordEvent(mouseEventWithFullPrecisionLocalPos(this, event));
   update();
 }
 
@@ -160,6 +180,43 @@ void RenderView::wheelEvent(QWheelEvent* event)
 
 bool RenderView::event(QEvent* event)
 {
+#if defined(Q_OS_ANDROID)
+  if (
+    event->type() == QEvent::TouchBegin || event->type() == QEvent::TouchUpdate
+    || event->type() == QEvent::TouchEnd)
+  {
+    const auto* touchEvent = static_cast<QTouchEvent*>(event);
+    if (!touchEvent->points().empty())
+    {
+      const auto& point = touchEvent->points().front();
+      const auto mouseType = event->type() == QEvent::TouchBegin   ? QEvent::MouseButtonPress
+                             : event->type() == QEvent::TouchEnd ? QEvent::MouseButtonRelease
+                                                                  : QEvent::MouseMove;
+      const auto buttons = event->type() == QEvent::TouchEnd ? Qt::NoButton : Qt::LeftButton;
+      const auto mouseEvent = QMouseEvent{
+        mouseType,
+        point.position(),
+        point.scenePosition(),
+        point.globalPosition(),
+        Qt::LeftButton,
+        buttons,
+        touchEvent->modifiers()};
+      m_eventRecorder.recordEvent(mouseEvent);
+      update();
+      event->accept();
+      return true;
+    }
+  }
+  if (
+    event->type() == QEvent::TouchCancel || event->type() == QEvent::Leave
+    || event->type() == QEvent::FocusOut || event->type() == QEvent::WindowDeactivate
+    || event->type() == QEvent::UngrabMouse)
+  {
+    m_eventRecorder.cancelMouseDrag();
+    update();
+  }
+#endif
+
   // Unfortunately, QWidget doesn't define a specialized handler for QNativeGestureEvent,
   // so we must override the main event handler to handle it.
   if (event->type() == QEvent::NativeGesture)
@@ -235,6 +292,7 @@ void RenderView::resizeGL(int w, int h)
 void RenderView::render()
 {
   auto gl = GlQt{glFunctions()};
+
 
   processInput();
   clearBackground(gl);
@@ -322,7 +380,7 @@ void RenderView::renderFocusIndicator(gl::Gl& gl)
   }
 }
 
-QOpenGLFunctions_2_1& RenderView::glFunctions()
+OpenGLFunctions& RenderView::glFunctions()
 {
   return getGlFunctions("RenderView::glFunctions", context());
 }

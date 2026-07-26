@@ -1,4 +1,11 @@
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateManual.cmake)
+if(NOT ANDROID)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateManual.cmake)
+else()
+    set(INDEX_OUTPUT_PATH "")
+    set(DOC_MANUAL_TARGET_FILES_ABSOLUTE "")
+    set(DOC_MANUAL_SHORTCUTS_JS_TARGET_ABSOLUTE "")
+    set(DOC_MANUAL_TARGET_IMAGE_FILES_ABSOLUTE "")
+endif()
 
 set(APP_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(TB_RESOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources")
@@ -6,6 +13,27 @@ set(TB_RESOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources")
 set(APP_SOURCE
     "${APP_SOURCE_DIR}/Main.cpp"
     "${TB_RESOURCE_DIR}/qrc/resources.qrc")
+
+if(ANDROID)
+    file(GLOB_RECURSE ANDROID_BUNDLED_RESOURCE_FILES CONFIGURE_DEPENDS RELATIVE "${TB_RESOURCE_DIR}"
+        "${TB_RESOURCE_DIR}/defaults/*"
+        "${TB_RESOURCE_DIR}/fonts/*"
+        "${TB_RESOURCE_DIR}/games/*"
+        "${TB_RESOURCE_DIR}/graphics/images/*"
+        "${TB_RESOURCE_DIR}/shader/*"
+        "${TB_RESOURCE_DIR}/stylesheets/*")
+
+    set(ANDROID_BUNDLED_RESOURCES_QRC "${CMAKE_CURRENT_BINARY_DIR}/android_bundled_resources.qrc")
+    file(WRITE "${ANDROID_BUNDLED_RESOURCES_QRC}" "<!DOCTYPE RCC><RCC version=\"1.0\">\n<qresource prefix=\"/tb_android_resources\">\n")
+    foreach(ANDROID_RESOURCE_FILE ${ANDROID_BUNDLED_RESOURCE_FILES})
+        set(ANDROID_RESOURCE_SOURCE "${TB_RESOURCE_DIR}/${ANDROID_RESOURCE_FILE}")
+        string(REPLACE "\\" "/" ANDROID_RESOURCE_SOURCE "${ANDROID_RESOURCE_SOURCE}")
+        string(REPLACE "graphics/images/" "images/" ANDROID_RESOURCE_ALIAS "${ANDROID_RESOURCE_FILE}")
+        file(APPEND "${ANDROID_BUNDLED_RESOURCES_QRC}" "  <file alias=\"${ANDROID_RESOURCE_ALIAS}\">${ANDROID_RESOURCE_SOURCE}</file>\n")
+    endforeach()
+    file(APPEND "${ANDROID_BUNDLED_RESOURCES_QRC}" "</qresource>\n</RCC>\n")
+    list(APPEND APP_SOURCE "${ANDROID_BUNDLED_RESOURCES_QRC}")
+endif()
 
 # OS X app bundle configuration, must happen before the executable is added
 if(APPLE)
@@ -111,7 +139,11 @@ string(REGEX REPLACE "^v(.*)" "\\1" CPACK_PACKAGE_VERSION "${GIT_DESCRIBE}")
 get_build_platform(APP_PLATFORM_NAME)
 
 # Create the executable target and link with libraries
-add_executable(TrenchBroom WIN32 MACOSX_BUNDLE)
+if(ANDROID)
+    qt_add_executable(TrenchBroom MANUAL_FINALIZATION)
+else()
+    add_executable(TrenchBroom WIN32 MACOSX_BUNDLE)
+endif()
 target_sources(TrenchBroom PRIVATE ${APP_SOURCE} ${INDEX_OUTPUT_PATH} ${DOC_MANUAL_TARGET_FILES_ABSOLUTE} ${DOC_MANUAL_SHORTCUTS_JS_TARGET_ABSOLUTE} ${DOC_MANUAL_TARGET_IMAGE_FILES_ABSOLUTE})
 
 if(WIN32 AND COMPILER_IS_MSVC)
@@ -134,6 +166,7 @@ target_link_libraries(TrenchBroom
     TbBaseLib
     TbPreferencesLib
     TbUiLib
+    $<$<PLATFORM_ID:Android>:log>
 )
 
 if(COMPILER_IS_MSVC)
@@ -146,7 +179,9 @@ endif()
 # Xcode "new build system" does't allow custom commands to be depended on by two unrelated targets
 # In this case, ${INDEX_OUTPUT_PATH} is depended on by TrenchBroom and GenerateManual
 # so we must make TrenchBroom depend on GenerateManual (see #3608)
-add_dependencies(TrenchBroom GenerateManual)
+if(NOT ANDROID)
+    add_dependencies(TrenchBroom GenerateManual)
+endif()
 
 set_target_properties(TrenchBroom PROPERTIES AUTORCC TRUE)
 
@@ -247,6 +282,14 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Linux|FreeBSD")
     # Make executable name conventional lowercase on linux
     string(TOLOWER TrenchBroom APP_TARGET_NAME_LOWER)
     set_target_properties(TrenchBroom PROPERTIES OUTPUT_NAME ${APP_TARGET_NAME_LOWER})
+endif()
+
+if(ANDROID)
+    set_target_properties(TrenchBroom PROPERTIES
+        QT_ANDROID_PACKAGE_NAME "io.github.trenchbroom"
+        QT_ANDROID_APP_NAME "TrenchBroom"
+        QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
+        QT_ANDROID_PERMISSIONS "android.permission.READ_EXTERNAL_STORAGE;android.permission.WRITE_EXTERNAL_STORAGE")
 endif()
 
 function(tb_add_post_build_copy_directory target source destination)
@@ -487,4 +530,8 @@ elseif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     set(CPACK_GENERATOR "External")
 endif()
 
-include(CPack)
+if(ANDROID)
+    qt_finalize_executable(TrenchBroom)
+else()
+    include(CPack)
+endif()

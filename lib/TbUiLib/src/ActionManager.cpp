@@ -1011,7 +1011,7 @@ void ActionManager::createEditMenu()
       QKeySequence::Cut,
       [](auto& context) { context.mapWindow().cutSelection(); },
       [](const auto& context) {
-        return context.hasDocument() && context.mapWindow().canCopySelection();
+        return context.hasDocument() && context.mapWindow().canCutSelection();
       },
     }),
     MenuEntryType::Cut);

@@ -23,12 +23,11 @@
 #include <QOpenGLWidget>
 
 #include "Color.h"
+#include "ui/GlFunctions.h"
 #include "NotifierConnection.h"
 #include "ui/InputEvent.h"
 
 #include <string>
-
-class QOpenGLFunctions_2_1;
 
 namespace tb
 {
@@ -100,7 +99,7 @@ private:
   void clearBackground(gl::Gl& gl);
   void renderFocusIndicator(gl::Gl& gl);
 
-  QOpenGLFunctions_2_1& glFunctions();
+  OpenGLFunctions& glFunctions();
 
 protected:
   // called by initializeGL by default

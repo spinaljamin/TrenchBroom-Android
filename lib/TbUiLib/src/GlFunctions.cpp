@@ -20,8 +20,10 @@
 #include "ui/GlFunctions.h"
 
 #include <QOpenGLContext>
+#if !defined(Q_OS_ANDROID)
 #include <QOpenGLFunctions_2_1>
 #include <QOpenGLVersionFunctionsFactory>
+#endif
 #include <QSurfaceFormat>
 
 #include "ui/FileLogger.h"
@@ -91,13 +93,25 @@ void logGlFunctionFactoryFailure(std::string_view callSite, QOpenGLContext* cont
 
 } // namespace
 
-QOpenGLFunctions_2_1& getGlFunctions(std::string_view callSite, QOpenGLContext* context)
+OpenGLFunctions& getGlFunctions(std::string_view callSite, QOpenGLContext* context)
 {
+#if defined(Q_OS_ANDROID)
+  if (context != nullptr)
+  {
+    auto* functions = context->functions();
+    if (functions != nullptr)
+    {
+      functions->initializeOpenGLFunctions();
+      return *functions;
+    }
+  }
+#else
   if (
     auto* functions = QOpenGLVersionFunctionsFactory::get<QOpenGLFunctions_2_1>(context))
   {
     return *functions;
   }
+#endif
 
   logGlFunctionFactoryFailure(callSite, context);
   contract_assert(false);

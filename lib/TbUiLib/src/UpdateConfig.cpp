@@ -47,6 +47,10 @@ namespace
 
 bool shouldEnableUpdating()
 {
+#if defined(Q_OS_ANDROID)
+  return false;
+#endif
+
   if (SystemPaths::isPortable())
   {
     return false;

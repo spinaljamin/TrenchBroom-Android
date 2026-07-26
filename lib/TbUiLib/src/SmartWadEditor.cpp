@@ -132,7 +132,7 @@ void SmartWadEditor::addWads()
     nullptr,
     tr("Load Wad Files"),
     fileDialogDefaultDirectory(FileDialogDir::MaterialCollection),
-    tr("Wad files (*.wad);;All files (*.*)"));
+    tr("Wad files (*.wad);;All files (*.*)"), nullptr, fileDialogOptions());
 
   if (pathQStrs.isEmpty())
   {

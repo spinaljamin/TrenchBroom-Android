@@ -1,3 +1,5 @@
-add_subdirectory(CmdTool)
-add_subdirectory(DumpShortcuts)
+if(NOT ANDROID)
+  add_subdirectory(CmdTool)
+  add_subdirectory(DumpShortcuts)
+endif()
 add_subdirectory(TrenchBroom)

@@ -81,10 +81,15 @@ public:
   template <std::ranges::range range>
   auto run_tasks(range tasks)
   {
-    return tasks | std::views::transform([&](auto&& task) {
-             return run_task(std::forward<decltype(task)>(task));
-           })
-           | kdl::ranges::to<std::vector>();
+    auto futures_range = tasks | std::views::transform([&](auto&& task) {
+                           return run_task(std::forward<decltype(task)>(task));
+                         });
+    auto futures = std::vector<std::ranges::range_value_t<decltype(futures_range)>>{};
+    for (auto future : futures_range)
+    {
+      futures.push_back(std::move(future));
+    }
+    return futures;
   }
 
   template <std::ranges::range range>

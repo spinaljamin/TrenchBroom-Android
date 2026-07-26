@@ -341,39 +341,43 @@ std::vector<gl::Texture> loadTexturesForMaterial(
   const auto textureCount =
     scene.mMaterials[materialIndex]->GetTextureCount(aiTextureType_DIFFUSE);
 
-  auto textures =
-    std::views::iota(0u, textureCount) | std::views::transform([&](const auto ti) {
-      auto assimpPath = aiString{};
-      scene.mMaterials[materialIndex]->GetTexture(aiTextureType_DIFFUSE, ti, &assimpPath);
+  auto textures = std::vector<gl::Texture>{};
+  textures.reserve(textureCount);
+  for (auto ti = 0u; ti < textureCount; ++ti)
+  {
+    auto assimpPath = aiString{};
+    scene.mMaterials[materialIndex]->GetTexture(aiTextureType_DIFFUSE, ti, &assimpPath);
 
-      if (const auto* texture = scene.GetEmbeddedTexture(assimpPath.C_Str()))
+    if (const auto* texture = scene.GetEmbeddedTexture(assimpPath.C_Str()))
+    {
+      if (texture->mHeight != 0)
       {
-        if (texture->mHeight != 0)
-        {
-          const auto transparentTexel =
-            getTransparentTexel(*scene.mMaterials[materialIndex]);
+        const auto transparentTexel =
+          getTransparentTexel(*scene.mMaterials[materialIndex]);
 
-          // The texture is uncompressed, load it directly.
-          return loadUncompressedEmbeddedTexture(
-            *texture->pcData, texture->mWidth, texture->mHeight, transparentTexel);
-        }
-
-        // The texture is embedded, but compressed. Let FreeImage load it from memory.
-        return loadCompressedEmbeddedTexture(
-          *texture->pcData, texture->mWidth, fs, logger);
+        // The texture is uncompressed, load it directly.
+        textures.push_back(loadUncompressedEmbeddedTexture(
+          *texture->pcData, texture->mWidth, texture->mHeight, transparentTexel));
+        continue;
       }
 
-      if (
-        const auto texturePath =
-          parseAssimpTexturePath(assimpPath, materialIndex, modelPath, logger))
-      {
-        // The texture is not embedded. Load it using the file system.
-        return loadTextureFromFileSystem(*texturePath, modelPath, fs, logger);
-      }
+      // The texture is embedded, but compressed. Let FreeImage load it from memory.
+      textures.push_back(loadCompressedEmbeddedTexture(
+        *texture->pcData, texture->mWidth, fs, logger));
+      continue;
+    }
 
-      return loadFallbackOrDefaultTexture(fs, logger);
-    })
-    | kdl::ranges::to<std::vector>();
+    if (
+      const auto texturePath =
+        parseAssimpTexturePath(assimpPath, materialIndex, modelPath, logger))
+    {
+      // The texture is not embedded. Load it using the file system.
+      textures.push_back(loadTextureFromFileSystem(*texturePath, modelPath, fs, logger));
+      continue;
+    }
+
+    textures.push_back(loadFallbackOrDefaultTexture(fs, logger));
+  }
 
   if (textures.empty())
   {
@@ -955,10 +959,13 @@ Result<EntityModelData> loadAssimpModel(
       // multiple alternatives (this is how assimp handles skins)
 
       // load skins for this surface
-      auto materials =
-        loadTexturesForMaterial(*scene, mesh->mMaterialIndex, path, fs, logger)
-        | kdl::views::as_rvalue | std::views::transform(createMaterial)
-        | kdl::ranges::to<std::vector>();
+      auto textures = loadTexturesForMaterial(*scene, mesh->mMaterialIndex, path, fs, logger);
+      auto materials = std::vector<gl::Material>{};
+      materials.reserve(textures.size());
+      for (auto& texture : textures)
+      {
+        materials.push_back(createMaterial(std::move(texture)));
+      }
       surface.setSkins(std::move(materials));
     }
 

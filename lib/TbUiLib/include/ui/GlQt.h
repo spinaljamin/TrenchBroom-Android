@@ -20,8 +20,9 @@
 #pragma once
 
 #include "gl/GlInterface.h"
+#include "ui/GlFunctions.h"
 
-class QOpenGLFunctions_2_1;
+#include <array>
 
 namespace tb::ui
 {
@@ -29,10 +30,25 @@ namespace tb::ui
 class GlQt : public gl::Gl
 {
 private:
-  QOpenGLFunctions_2_1& m_gl;
+  OpenGLFunctions& m_gl;
+#if defined(Q_OS_ANDROID)
+  GLenum m_matrixMode = GL_MODELVIEW;
+  std::array<GLfloat, 16> m_modelViewMatrix{
+    1.0f, 0.0f, 0.0f, 0.0f,
+    0.0f, 1.0f, 0.0f, 0.0f,
+    0.0f, 0.0f, 1.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, 1.0f};
+  std::array<GLfloat, 16> m_projectionMatrix{
+    1.0f, 0.0f, 0.0f, 0.0f,
+    0.0f, 1.0f, 0.0f, 0.0f,
+    0.0f, 0.0f, 1.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, 1.0f};
+
+  void uploadAndroidMatrixUniforms();
+#endif
 
 public:
-  explicit GlQt(QOpenGLFunctions_2_1& gl);
+  explicit GlQt(OpenGLFunctions& gl);
 
   void clear(GLbitfield mask) override;
   void clearColor(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) override;

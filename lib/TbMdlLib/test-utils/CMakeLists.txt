@@ -24,4 +24,6 @@ target_link_libraries(TbMdlTestUtilsLib
     TbMdlLib
 )
 
-add_subdirectory(test)
+if(NOT ANDROID)
+  add_subdirectory(test)
+endif()

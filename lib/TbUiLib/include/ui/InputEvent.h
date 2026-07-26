@@ -321,6 +321,7 @@ private:
    Indicates that we received a mouse down event, cleared on mouse up.
    */
   bool m_anyMouseButtonDown = false;
+  MouseEvent::Button m_lastMouseButton = MouseEvent::Button::None;
   /**
    * The X position of the last mouse down event.
    */
@@ -373,6 +374,8 @@ public:
    * @param event the event to record
    */
   void recordEvent(const QNativeGestureEvent& event);
+
+  void cancelMouseDrag();
 
   /**
    * Processes all recorded events using the given event processor.

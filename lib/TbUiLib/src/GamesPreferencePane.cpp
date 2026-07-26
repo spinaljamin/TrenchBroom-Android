@@ -278,7 +278,7 @@ void GamePreferencePane::createGui()
         const auto pathStr = QFileDialog::getOpenFileName(
           this,
           tr("%1 Path").arg(QString::fromStdString(toolName)),
-          fileDialogDefaultDirectory(FileDialogDir::CompileTool));
+          fileDialogDefaultDirectory(FileDialogDir::CompileTool), QString{}, nullptr, fileDialogOptions());
         if (!pathStr.isEmpty())
         {
           edit->setText(pathStr);
@@ -302,7 +302,7 @@ void GamePreferencePane::createGui()
 void GamePreferencePane::chooseGamePathClicked()
 {
   const auto pathStr = QFileDialog::getExistingDirectory(
-    this, tr("Game Path"), fileDialogDefaultDirectory(FileDialogDir::GamePath));
+    this, tr("Game Path"), fileDialogDefaultDirectory(FileDialogDir::GamePath), fileDialogOptions());
   if (!pathStr.isEmpty())
   {
     updateGamePath(pathStr);

@@ -25,6 +25,7 @@
 #include "fs/PathInfo.h"
 #include "fs/TraversalMode.h"
 #include "fs/VirtualFileSystem.h"
+#include "mdl/GameConfig.h"
 #include "mdl/GameInfo.h"
 #include "mdl/ParseCompilationConfig.h"
 #include "mdl/ParseGameConfig.h"
@@ -33,6 +34,7 @@
 #include "kd/const_overload.h"
 #include "kd/path_utils.h"
 #include "kd/result_fold.h"
+#include "kd/vector_utils.h"
 
 #include <algorithm>
 #include <iostream>
@@ -47,26 +49,6 @@ namespace
 const auto gameConfigFilename = "GameConfig.cfg";
 const auto compilationConfigFilename = "CompilationProfiles.cfg";
 const auto gameEngineConfigFilename = "GameEngineProfiles.cfg";
-
-struct LoadConfigError
-{
-  std::filesystem::path path;
-  std::string msg;
-};
-
-template <typename Value>
-using LoadConfigResult = kdl::result<Value, LoadConfigError>;
-
-template <typename Config>
-auto toLoadConfigResult(const auto& path)
-{
-  return kdl::or_else([=](auto e) {
-    return LoadConfigResult<Config>{LoadConfigError{
-      path,
-      std::move(e.msg),
-    }};
-  });
-}
 
 Result<std::unique_ptr<fs::WritableVirtualFileSystem>> createFileSystem(
   const std::vector<std::filesystem::path>& gameConfigSearchDirs,
@@ -110,7 +92,7 @@ Result<void> migrateConfigFiles(
   return Result<void>{};
 }
 
-LoadConfigResult<void> loadCompilationConfig(const fs::FileSystem& fs, GameInfo& gameInfo)
+Result<void> loadCompilationConfig(const fs::FileSystem& fs, GameInfo& gameInfo)
 {
   const auto path = gameInfo.gameConfig.configFileFolder() / compilationConfigFilename;
   if (fs.pathInfo(path) == fs::PathInfo::File)
@@ -119,7 +101,6 @@ LoadConfigResult<void> loadCompilationConfig(const fs::FileSystem& fs, GameInfo&
              auto reader = profilesFile->reader().buffer();
              return parseCompilationConfig(reader.stringView());
            })
-           | toLoadConfigResult<CompilationConfig>(path)
            | kdl::transform([&](auto compilationConfig) {
                gameInfo.compilationConfig = std::move(compilationConfig);
              })
@@ -127,10 +108,10 @@ LoadConfigResult<void> loadCompilationConfig(const fs::FileSystem& fs, GameInfo&
              [&](const auto&) { gameInfo.compilationConfigParseFailed = true; });
   }
 
-  return LoadConfigResult<void>{};
+  return Result<void>{};
 }
 
-LoadConfigResult<void> loadGameEngineConfig(const fs::FileSystem& fs, GameInfo& gameInfo)
+Result<void> loadGameEngineConfig(const fs::FileSystem& fs, GameInfo& gameInfo)
 {
   const auto path = gameInfo.gameConfig.configFileFolder() / gameEngineConfigFilename;
   if (fs.pathInfo(path) == fs::PathInfo::File)
@@ -139,7 +120,6 @@ LoadConfigResult<void> loadGameEngineConfig(const fs::FileSystem& fs, GameInfo& 
              auto reader = profilesFile->reader().buffer();
              return parseGameEngineConfig(reader.stringView());
            })
-           | toLoadConfigResult<GameEngineConfig>(path)
            | kdl::transform([&](auto gameEngineConfig) {
                gameInfo.gameEngineConfig = std::move(gameEngineConfig);
              })
@@ -147,7 +127,7 @@ LoadConfigResult<void> loadGameEngineConfig(const fs::FileSystem& fs, GameInfo& 
              [&](const auto&) { gameInfo.gameEngineConfigParseFailed = true; });
   }
 
-  return LoadConfigResult<void>{};
+  return Result<void>{};
 }
 
 Result<GameConfig> loadGameConfig(
@@ -169,15 +149,13 @@ Result<GameConfig> loadGameConfig(
            });
 }
 
-LoadConfigResult<GameInfo> loadGameInfo(
+Result<GameInfo> loadGameInfo(
   fs::FileSystem& fs,
   const std::filesystem::path& userGameDir,
   const std::filesystem::path& path,
-  std::map<std::filesystem::path, std::string>& warnings)
+  std::vector<std::string>& warnings)
 {
-  const auto saveWarning = [&](LoadConfigError e) {
-    warnings.emplace(std::move(e.path), std::move(e.msg));
-  };
+  const auto saveWarning = [&](const auto& e) { warnings.push_back(e.msg); };
 
   return loadGameConfig(fs, userGameDir, path) | kdl::transform([&](auto gameConfig) {
            auto gameInfo = makeGameInfo(std::move(gameConfig));
@@ -186,14 +164,13 @@ LoadConfigResult<GameInfo> loadGameInfo(
            loadGameEngineConfig(fs, gameInfo) | kdl::transform_error(saveWarning);
 
            return gameInfo;
-         })
-         | toLoadConfigResult<GameInfo>(path);
+         });
 }
 
 Result<std::vector<GameInfo>> loadGameInfos(
   fs::FileSystem& fs,
   const std::filesystem::path& userGameDir,
-  std::map<std::filesystem::path, std::string>& warnings)
+  std::vector<std::string>& warnings)
 {
   return fs.find(
            {},
@@ -206,14 +183,34 @@ Result<std::vector<GameInfo>> loadGameInfos(
                })
                | kdl::collect();
 
-             for (auto error : errors)
-             {
-               warnings.emplace(std::move(error.path), std::move(error.msg));
-             }
-
+             kdl::vec_append(
+               warnings, std::move(errors) | std::views::transform([](auto&& e) {
+                           return std::move(e.msg);
+                         }));
              return std::move(gameInfos);
            });
 }
+
+#if defined(ANDROID)
+GameInfo makeAndroidFallbackGameInfo()
+{
+  auto config = GameConfig{};
+  config.name = "Generic";
+  config.icon = "DefaultGameIcon.svg";
+  config.fileFormats = std::vector<MapFormatConfig>{
+    MapFormatConfig{"Standard", "initial_standard.map"},
+    MapFormatConfig{"Valve", "initial_valve.map"},
+    MapFormatConfig{"Quake2", "initial_quake2.map"},
+  };
+  config.fileSystemConfig.searchPath = ".";
+  config.fileSystemConfig.packageFormat.extensions = {".pak"};
+  config.fileSystemConfig.packageFormat.format = "idpak";
+  config.materialConfig.root = "textures";
+  config.materialConfig.extensions = {".jpg", ".jpeg", ".tga", ".png"};
+  config.entityConfig.defaultColor = Color{RgbaF{0.6f, 0.6f, 0.6f, 1.0f}};
+  return makeGameInfo(std::move(config));
+}
+#endif
 
 void backupFile(
   fs::WritableFileSystem& fs,
@@ -385,16 +382,23 @@ Result<void> GameManager::updateGameEngineConfig(
   return Error{fmt::format("Unknown game: {}", gameName)};
 }
 
-Result<kdl::multi_value<GameManager, std::map<std::filesystem::path, std::string>>>
-initializeGameManager(
+Result<kdl::multi_value<GameManager, std::vector<std::string>>> initializeGameManager(
   const std::vector<std::filesystem::path>& gameConfigSearchDirs,
   const std::filesystem::path& userGameDir)
 {
   return createFileSystem(gameConfigSearchDirs, userGameDir)
          | kdl::and_then([&](auto fs) {
-             auto warnings = std::map<std::filesystem::path, std::string>{};
+             auto warnings = std::vector<std::string>{};
              return loadGameInfos(*fs, userGameDir, warnings)
                     | kdl::transform([&](auto gameInfos) {
+#if defined(ANDROID)
+                        if (gameInfos.empty())
+                        {
+                          warnings.push_back(
+                            "Android fallback: using built-in Generic game config");
+                          gameInfos.push_back(makeAndroidFallbackGameInfo());
+                        }
+#endif
                         return kdl::multi_value{
                           GameManager{std::move(fs), std::move(gameInfos)},
                           std::move(warnings)};

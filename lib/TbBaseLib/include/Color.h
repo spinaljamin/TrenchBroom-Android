@@ -30,10 +30,10 @@
 
 namespace tb
 {
-extern template struct ColorComponentType<ColorChannel::r, float, 0.0f, 1.0f, 0.0f>;
-extern template struct ColorComponentType<ColorChannel::g, float, 0.0f, 1.0f, 0.0f>;
-extern template struct ColorComponentType<ColorChannel::b, float, 0.0f, 1.0f, 0.0f>;
-extern template struct ColorComponentType<ColorChannel::a, float, 0.0f, 1.0f, 1.0f>;
+extern template struct ColorComponentType<ColorChannel::r, float, 0, 1, 0>;
+extern template struct ColorComponentType<ColorChannel::g, float, 0, 1, 0>;
+extern template struct ColorComponentType<ColorChannel::b, float, 0, 1, 0>;
+extern template struct ColorComponentType<ColorChannel::a, float, 0, 1, 1>;
 
 extern template struct ColorComponentType<ColorChannel::r, uint8_t, 0, 255, 0>;
 extern template struct ColorComponentType<ColorChannel::g, uint8_t, 0, 255, 0>;
@@ -43,10 +43,10 @@ extern template struct ColorComponentType<ColorChannel::a, uint8_t, 0, 255, 255>
 namespace ColorComponents
 {
 
-using Rf = ColorComponentType<ColorChannel::r, float, 0.0f, 1.0f, 0.0f>;
-using Gf = ColorComponentType<ColorChannel::g, float, 0.0f, 1.0f, 0.0f>;
-using Bf = ColorComponentType<ColorChannel::b, float, 0.0f, 1.0f, 0.0f>;
-using Af = ColorComponentType<ColorChannel::a, float, 0.0f, 1.0f, 1.0f>;
+using Rf = ColorComponentType<ColorChannel::r, float, 0, 1, 0>;
+using Gf = ColorComponentType<ColorChannel::g, float, 0, 1, 0>;
+using Bf = ColorComponentType<ColorChannel::b, float, 0, 1, 0>;
+using Af = ColorComponentType<ColorChannel::a, float, 0, 1, 1>;
 
 using Rb = ColorComponentType<ColorChannel::r, uint8_t, 0, 255, 0>;
 using Gb = ColorComponentType<ColorChannel::g, uint8_t, 0, 255, 0>;

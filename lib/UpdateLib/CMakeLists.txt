@@ -53,4 +53,6 @@ elseif (APPLE)
   set(LIB_UPDATE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/scripts/install_update.sh" CACHE INTERNAL "Path to the update script")
 endif()
 
-add_subdirectory(test)
+if(NOT ANDROID)
+  add_subdirectory(test)
+endif()

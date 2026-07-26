@@ -266,7 +266,7 @@ void EntityDefinitionFileChooser::chooseExternalClicked()
     "All supported entity definition files (*.fgd *.def *.ent);;"
     "Worldcraft / Hammer files (*.fgd);;"
     "QuakeC files (*.def);;"
-    "Radiant XML files (*.ent)");
+    "Radiant XML files (*.ent)", nullptr, fileDialogOptions());
 
   if (!fileName.isEmpty())
   {

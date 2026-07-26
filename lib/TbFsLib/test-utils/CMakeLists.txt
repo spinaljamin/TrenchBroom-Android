@@ -20,4 +20,6 @@ target_link_libraries(TbFsTestUtilsLib
     VmLib
 )
 
-add_subdirectory(test)
+if(NOT ANDROID)
+  add_subdirectory(test)
+endif()

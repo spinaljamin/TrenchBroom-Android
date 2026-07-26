@@ -25,6 +25,7 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace tb::gl
 {
@@ -51,5 +52,7 @@ public:
 };
 
 Result<Shader> loadShader(Gl& gl, const std::filesystem::path& path, GLenum type);
+Result<Shader> loadShader(
+  Gl& gl, std::string name, const std::vector<std::filesystem::path>& paths, GLenum type);
 
 } // namespace tb::gl

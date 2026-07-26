@@ -32,5 +32,9 @@ target_link_libraries(TbBaseLib
     VmLib
 )
 
-add_subdirectory(test)
-add_subdirectory(test-utils)
+if(NOT ANDROID)
+  add_subdirectory(test)
+endif()
+if(NOT ANDROID)
+  add_subdirectory(test-utils)
+endif()
